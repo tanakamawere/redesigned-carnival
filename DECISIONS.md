@@ -54,3 +54,12 @@ Validation logic (30% rule and overlap checks) was extracted into a
 standalone `LeaveRequestValidator` class, separate from the endpoint/HTTP
 layer, so it can be unit tested directly against an EF Core InMemory
 context without spinning up the API.
+
+## Seeding
+Employees and public holidays are seeded from `SeedData/employees.csv` and
+`SeedData/public_holidays.json` at startup, only when their respective
+tables are empty (idempotent — safe to restart without duplicating data).
+Employee IDs are generated as new GUIDs at seed time rather than stored in
+the CSV, so the seed file only needs Name and Team columns. To test against
+different seed data, replace these two files (same shape) and start against
+a fresh database.
