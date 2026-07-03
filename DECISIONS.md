@@ -63,3 +63,14 @@ Employee IDs are generated as new GUIDs at seed time rather than stored in
 the CSV, so the seed file only needs Name and Team columns. To test against
 different seed data, replace these two files (same shape) and start against
 a fresh database.
+
+## Authentication
+No auth system is implemented, as the brief does not request one. The
+submission form includes an employee selector; the selected employee is
+used as the requester. This is a stand-in for a real auth/session layer,
+which would be the natural next step outside this brief's scope.
+
+## Team Scoping
+GET /api/employees returns all employees across all teams, not scoped to a
+"manager." No manager entity or manager-to-team mapping exists in the
+schema, consistent with the no-auth decision above.

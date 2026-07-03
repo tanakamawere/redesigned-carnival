@@ -40,13 +40,25 @@ public static class Endpoints
 
             return Results.Created($"/api/leaverequests/{leaveRequest.Id}", leaveRequest);
         });
-
-
-        // Endpoint to list all leave requests
-        app.MapGet("/api/leaverequests", async (DataContext context) =>
+        
+        // Endpoint to list all employees
+        app.MapGet("/api/employees", async (DataContext context) =>
         {
-            var leaveRequests = await context.LeaveRequests.ToListAsync();
-            return Results.Ok(leaveRequests);
+            var employees = await context.Employees.ToListAsync();
+            return Results.Ok(employees);
+        });
+
+        // Endpoint to list leave requests for the next 30 days
+        app.MapGet("/api/leaverequests/upcoming", async (DataContext context) =>
+        {
+            var today = DateTime.UtcNow.Date;
+            var windowEnd = today.AddDays(30);
+
+            var upcoming = await context.LeaveRequests
+                .Where(lr => lr.StartDate <= windowEnd && lr.EndDate >= today)
+                .ToListAsync();
+
+            return Results.Ok(upcoming);
         });
 
         // Endpoint to approve a leave request
