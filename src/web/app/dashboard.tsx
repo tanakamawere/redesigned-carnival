@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Employee,
   LeaveRequest,
+  PublicHoliday,
   getTeamColor,
   getTeamName,
-  getStatusColor,
-  getStatusName,
 } from "./types";
 import {
   createLeaveRequest,
@@ -19,14 +18,39 @@ import {
 interface DashboardProps {
   employees: Employee[];
   requests: LeaveRequest[];
+  holidays: PublicHoliday[];
+}
+
+function useTheme() {
+  const [dark, setDark] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("theme");
+    const prefersDark =
+      stored === "dark" ||
+      (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    setDark(prefersDark);
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    document.documentElement.classList.toggle("dark", dark);
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark, mounted]);
+
+  return { dark, toggle: () => setDark((d) => !d), mounted };
 }
 
 export default function TeamLeaveDashboard({
   employees,
   requests,
+  holidays,
 }: DashboardProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const { dark, toggle, mounted } = useTheme();
 
   // Form state
   const [employeeId, setEmployeeId] = useState("");
@@ -36,11 +60,15 @@ export default function TeamLeaveDashboard({
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  // Approve/Reject states per request
-  const [actionLoadingMap, setActionLoadingMap] = useState<Record<number, boolean>>({});
-  const [actionErrorMap, setActionErrorMap] = useState<Record<number, string>>({});
+  // Approve/Reject per-request state
+  const [actionLoadingMap, setActionLoadingMap] = useState<
+    Record<number, boolean>
+  >({});
+  const [actionErrorMap, setActionErrorMap] = useState<
+    Record<number, string>
+  >({});
 
-  // Generate the next 30 days starting from today (July 3, 2026, or current date)
+  // Next 30 days
   const calendarDays = Array.from({ length: 30 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() + i);
@@ -48,294 +76,286 @@ export default function TeamLeaveDashboard({
     return d;
   });
 
-  // Helper to get YYYY-MM-DD string representation of a Date object (ignores local offset issues)
-  const getYearMonthDayString = (date: Date) => {
+  const toDateStr = (date: Date) => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, "0");
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   };
 
-  // Helper to extract date part from API ISO string
-  const getRequestDateString = (isoString: string) => {
-    return isoString.substring(0, 10);
+  const isoToDate = (iso: string) => iso.substring(0, 10);
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
   };
 
-  // Handle new leave submission
+  // Handlers
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!employeeId || !startDate || !endDate) {
       setSubmitError("Please fill out all fields.");
       return;
     }
-
     setSubmitLoading(true);
     setSubmitError(null);
     setSubmitSuccess(false);
 
-    const response = await createLeaveRequest(employeeId, startDate, endDate);
-
-    if (response.success) {
+    const res = await createLeaveRequest(employeeId, startDate, endDate);
+    if (res.success) {
       setSubmitSuccess(true);
       setStartDate("");
       setEndDate("");
       setEmployeeId("");
-      startTransition(() => {
-        router.refresh();
-      });
+      startTransition(() => router.refresh());
     } else {
-      setSubmitError(response.error || "An unexpected error occurred.");
+      setSubmitError(res.error || "An unexpected error occurred.");
     }
     setSubmitLoading(false);
   };
 
-  // Handle approving a request
   const handleApprove = async (id: number) => {
-    setActionLoadingMap((prev) => ({ ...prev, [id]: true }));
-    setActionErrorMap((prev) => ({ ...prev, [id]: "" }));
-
-    const response = await approveLeaveRequest(id);
-
-    if (response.success) {
-      startTransition(() => {
-        router.refresh();
-      });
+    setActionLoadingMap((p) => ({ ...p, [id]: true }));
+    setActionErrorMap((p) => ({ ...p, [id]: "" }));
+    const res = await approveLeaveRequest(id);
+    if (res.success) {
+      startTransition(() => router.refresh());
     } else {
-      setActionErrorMap((prev) => ({
-        ...prev,
-        [id]: response.error || "Failed to approve leave request.",
+      setActionErrorMap((p) => ({
+        ...p,
+        [id]: res.error || "Failed to approve.",
       }));
     }
-    setActionLoadingMap((prev) => ({ ...prev, [id]: false }));
+    setActionLoadingMap((p) => ({ ...p, [id]: false }));
   };
 
-  // Handle rejecting a request
   const handleReject = async (id: number) => {
-    setActionLoadingMap((prev) => ({ ...prev, [id]: true }));
-    setActionErrorMap((prev) => ({ ...prev, [id]: "" }));
-
-    const response = await rejectLeaveRequest(id);
-
-    if (response.success) {
-      startTransition(() => {
-        router.refresh();
-      });
+    setActionLoadingMap((p) => ({ ...p, [id]: true }));
+    setActionErrorMap((p) => ({ ...p, [id]: "" }));
+    const res = await rejectLeaveRequest(id);
+    if (res.success) {
+      startTransition(() => router.refresh());
     } else {
-      setActionErrorMap((prev) => ({
-        ...prev,
-        [id]: response.error || "Failed to reject leave request.",
+      setActionErrorMap((p) => ({
+        ...p,
+        [id]: res.error || "Failed to reject.",
       }));
     }
-    setActionLoadingMap((prev) => ({ ...prev, [id]: false }));
+    setActionLoadingMap((p) => ({ ...p, [id]: false }));
   };
 
-  // Filter requests
-  const approvedRequests = requests.filter((r) => r.status === 1); // 1 = Approved
-  const pendingRequests = requests.filter((r) => r.status === 0); // 0 = Pending
-  const rejectedRequests = requests.filter((r) => r.status === 2); // 2 = Rejected
-
-  // Formatting date for display
-  const formatFriendlyDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
+  // Filter
+  const approvedRequests = requests.filter((r) => r.status === 1);
+  const pendingRequests = requests.filter((r) => r.status === 0);
+  const rejectedRequests = requests.filter((r) => r.status === 2);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased">
-      {/* Top Banner Header */}
-      <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 font-sans">
+      {/* Header */}
+      <header className="border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <svg
-                className="w-5 h-5 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
+            <svg
+              className="w-5 h-5 text-gray-500 dark:text-slate-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            <h1 className="text-base font-semibold">Team Leave Scheduler</h1>
+          </div>
+          <button
+            onClick={toggle}
+            className="p-2 rounded-md border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-500 dark:text-slate-400 cursor-pointer"
+            aria-label="Toggle theme"
+          >
+            {mounted && dark ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
               </svg>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-                Team Leave Scheduler
-              </h1>
-              <p className="text-xs text-slate-500 font-medium">Internal HR Scheduling Hub</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Connected to API
-          </div>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+              </svg>
+            )}
+          </button>
         </div>
       </header>
 
-      {/* Main Workspace Layout */}
-      <main className="max-w-7xl mx-auto px-6 py-8 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
-        {/* Left 2 Columns: Calendar Visualizer */}
-        <section className="lg:col-span-2 space-y-6">
+      {/* Main */}
+      <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
+        {/* Left: Calendar */}
+        <section className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                Approved Leave Calendar
-                <span className="text-xs font-normal text-slate-400">Next 30 Days</span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Visual timeline showing team members on approved leave.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-2xs px-2 py-0.5 rounded border border-blue-500/20 bg-blue-500/5 text-blue-400 font-medium">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+              Approved Leave &mdash; Next 30 Days
+            </h2>
+            <div className="flex gap-2 text-xs">
+              <span className="px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
                 Engineering
               </span>
-              <span className="text-2xs px-2 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 font-medium">
+              <span className="px-2 py-0.5 rounded border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300">
                 Operations
               </span>
-              <span className="text-2xs px-2 py-0.5 rounded border border-amber-500/20 bg-amber-500/5 text-amber-400 font-medium">
+              <span className="px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
                 Finance
               </span>
             </div>
           </div>
 
-          {/* 30-Day Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
             {calendarDays.map((day, idx) => {
-              const dayStr = getYearMonthDayString(day);
+              const dayStr = toDateStr(day);
               const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-
-              // Find leaves overlapping this day
+              const holiday = holidays.find(
+                (h) => isoToDate(h.date) === dayStr
+              );
               const activeLeaves = approvedRequests.filter((r) => {
-                const start = getRequestDateString(r.startDate);
-                const end = getRequestDateString(r.endDate);
-                return start <= dayStr && end >= dayStr;
+                const s = isoToDate(r.startDate);
+                const e = isoToDate(r.endDate);
+                return s <= dayStr && e >= dayStr;
               });
+              const isNonWorking = isWeekend || !!holiday;
 
               return (
                 <div
                   key={idx}
-                  className={`relative flex flex-col p-4 rounded-xl border transition-all duration-300 ${
-                    isWeekend
-                      ? "bg-slate-950 border-slate-900 text-slate-600"
-                      : "bg-slate-900/40 border-slate-800/80 text-slate-100 hover:border-slate-700/80 hover:bg-slate-900/60"
+                  className={`rounded-md border p-2.5 min-h-[80px] flex flex-col ${
+                    isNonWorking
+                      ? "bg-gray-50 dark:bg-slate-800/50 border-gray-100 dark:border-slate-800 text-gray-400 dark:text-slate-600"
+                      : "bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700"
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-bold text-slate-300">
-                      {day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium text-gray-700 dark:text-slate-300">
+                      {day.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </span>
-                    <span className="text-2xs uppercase tracking-wider font-semibold opacity-60">
+                    <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-slate-500">
                       {day.toLocaleDateString("en-US", { weekday: "short" })}
                     </span>
                   </div>
 
-                  {isWeekend ? (
-                    <div className="flex-1 flex items-center justify-center text-3xs font-medium text-slate-700 uppercase tracking-widest min-h-[48px]">
+                  {holiday && (
+                    <div className="px-1.5 py-0.5 rounded text-[10px] font-medium border bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 mb-1">
+                      {holiday.name}
+                    </div>
+                  )}
+
+                  {isWeekend && !holiday ? (
+                    <div className="flex-1 flex items-center justify-center text-[10px] text-gray-300 dark:text-slate-700">
                       Weekend
                     </div>
                   ) : activeLeaves.length > 0 ? (
-                    <div className="space-y-1.5 flex-1 min-h-[48px]">
+                    <div className="space-y-1 flex-1">
                       {activeLeaves.map((req) => {
-                        const emp = employees.find((e) => e.id === req.employeeId);
+                        const emp = employees.find(
+                          (e) => e.id === req.employeeId
+                        );
                         if (!emp) return null;
-                        const colors = getTeamColor(emp.team);
-
+                        const c = getTeamColor(emp.team);
                         return (
                           <div
                             key={req.id}
-                            className={`flex flex-col px-2.5 py-1.5 rounded-lg border ${colors.bg} ${colors.border} text-3xs font-medium`}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${c.bg} ${c.border} ${c.text}`}
                           >
-                            <span className={`font-semibold ${colors.text}`}>{emp.name}</span>
-                            <span className="text-4xs opacity-75 mt-0.5 text-slate-400">
-                              {getTeamName(emp.team)}
-                            </span>
+                            {emp.name}
                           </div>
                         );
                       })}
                     </div>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-4xs font-medium text-slate-600 uppercase tracking-wider min-h-[48px]">
-                      No Leave
+                  ) : !holiday ? (
+                    <div className="flex-1 flex items-center justify-center text-[10px] text-gray-300 dark:text-slate-700">
+                      &mdash;
                     </div>
-                  )}
+                  ) : null}
                 </div>
               );
             })}
           </div>
         </section>
 
-        {/* Right Column: Forms & Action Panels */}
-        <section className="space-y-8">
-          {/* Submit Leave Request Form */}
-          <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-850 backdrop-blur-md space-y-5">
-            <div>
-              <h2 className="text-md font-bold text-white tracking-tight">Request Leave</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Submit a new request for verification.</p>
-            </div>
+        {/* Right: Form + Pending */}
+        <section className="space-y-6">
+          {/* Submit Form */}
+          <div className="rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
+            <h2 className="text-sm font-semibold mb-1">Request Leave</h2>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">
+              Submit a new leave request for review.
+            </p>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400">Employee</label>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
+                  Employee
+                </label>
                 <select
                   required
                   value={employeeId}
                   onChange={(e) => setEmployeeId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200"
+                  className="w-full border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
                 >
                   <option value="" disabled>
-                    Select team member...
+                    Select team member…
                   </option>
                   {employees
                     .slice()
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .map((emp) => (
-                      <option key={emp.id} value={emp.id} className="bg-slate-950 text-slate-200">
+                      <option key={emp.id} value={emp.id}>
                         {emp.name} ({getTeamName(emp.team)})
                       </option>
                     ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-400">Start Date</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
+                    Start Date
+                  </label>
                   <input
                     type="date"
                     required
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200"
+                    className="w-full border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-400">End Date</label>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
+                    End Date
+                  </label>
                   <input
                     type="date"
                     required
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200"
+                    className="w-full border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
                   />
                 </div>
               </div>
 
               {submitError && (
-                <div className="p-3 rounded-lg border border-red-500/20 bg-red-500/5 text-xs text-red-400 font-medium leading-relaxed">
+                <div className="p-2.5 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 text-xs text-red-700 dark:text-red-300">
                   {submitError}
                 </div>
               )}
 
               {submitSuccess && (
-                <div className="p-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-xs text-emerald-400 font-medium">
+                <div className="p-2.5 rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 text-xs text-green-700 dark:text-green-300">
                   Leave request submitted successfully.
                 </div>
               )}
@@ -343,103 +363,82 @@ export default function TeamLeaveDashboard({
               <button
                 type="submit"
                 disabled={submitLoading}
-                className="w-full bg-gradient-to-r from-violet-600 to-indigo-500 hover:from-violet-500 hover:to-indigo-400 text-white font-semibold py-2.5 rounded-xl text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full bg-gray-900 dark:bg-slate-100 text-white dark:text-slate-900 font-medium py-2 rounded-md text-sm hover:bg-gray-800 dark:hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {submitLoading ? (
-                  <>
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                    Submitting...
-                  </>
-                ) : (
-                  "Submit Request"
-                )}
+                {submitLoading ? "Submitting…" : "Submit Request"}
               </button>
             </form>
           </div>
 
-          {/* Pending Leave Requests */}
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-md font-bold text-white tracking-tight flex items-center gap-2">
-                Pending Approval
-                <span className="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 text-3xs font-semibold">
-                  {pendingRequests.length}
+          {/* Pending Requests */}
+          <div>
+            <h2 className="text-sm font-semibold mb-1 flex items-center gap-2">
+              Pending Approval
+              {pendingRequests.length > 0 && (
+                <span className="text-xs font-normal text-gray-500 dark:text-slate-400">
+                  ({pendingRequests.length})
                 </span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">Needs HR authorization.</p>
-            </div>
+              )}
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mb-3">
+              Requests awaiting a decision.
+            </p>
 
             {pendingRequests.length === 0 ? (
-              <div className="p-8 rounded-2xl border border-slate-900/60 bg-slate-950/20 flex flex-col items-center justify-center text-center">
-                <span className="text-slate-700 text-2xl">✓</span>
-                <p className="text-xs text-slate-500 mt-2 font-medium">All clear! No pending requests.</p>
+              <div className="rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 text-center text-xs text-gray-400 dark:text-slate-500">
+                No pending requests.
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {pendingRequests.map((req) => {
-                  const emp = employees.find((e) => e.id === req.employeeId);
+                  const emp = employees.find(
+                    (e) => e.id === req.employeeId
+                  );
                   if (!emp) return null;
-                  const isActionLoading = actionLoadingMap[req.id] || false;
-                  const actionError = actionErrorMap[req.id];
-                  const teamColors = getTeamColor(emp.team);
+                  const loading = actionLoadingMap[req.id] || false;
+                  const error = actionErrorMap[req.id];
+                  const tc = getTeamColor(emp.team);
 
                   return (
                     <div
                       key={req.id}
-                      className="p-4 rounded-xl border border-slate-900 bg-slate-900/20 space-y-3.5 transition-all duration-200"
+                      className="rounded-md border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-2"
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between gap-2">
                         <div>
-                          <h3 className="text-sm font-bold text-white">{emp.name}</h3>
+                          <p className="text-sm font-medium">{emp.name}</p>
                           <span
-                            className={`inline-block text-4xs px-2 py-0.5 rounded border mt-1 font-semibold ${teamColors.bg} ${teamColors.border} ${teamColors.text}`}
+                            className={`inline-block text-[10px] px-1.5 py-0.5 rounded border mt-0.5 font-medium ${tc.bg} ${tc.border} ${tc.text}`}
                           >
                             {getTeamName(emp.team)}
                           </span>
                         </div>
-                        <span className="text-3xs font-medium text-slate-400 uppercase bg-slate-900 border border-slate-800 px-2 py-0.5 rounded">
-                          {formatFriendlyDate(req.startDate)} - {formatFriendlyDate(req.endDate)}
+                        <span className="text-[11px] text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                          {formatDate(req.startDate)} –{" "}
+                          {formatDate(req.endDate)}
                         </span>
                       </div>
 
-                      {actionError && (
-                        <div className="p-2.5 rounded-lg border border-red-500/20 bg-red-500/5 text-3xs text-red-400 font-medium leading-relaxed">
-                          {actionError}
+                      {error && (
+                        <div className="p-2 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 text-[11px] text-red-700 dark:text-red-300">
+                          {error}
                         </div>
                       )}
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex gap-2">
                         <button
-                          disabled={isActionLoading}
+                          disabled={loading}
                           onClick={() => handleApprove(req.id)}
-                          className="flex-1 bg-emerald-600/10 hover:bg-emerald-600 hover:text-white border border-emerald-500/20 hover:border-emerald-500 text-emerald-400 font-semibold py-1.5 rounded-lg text-xs transition-all duration-200 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="flex-1 py-1.5 rounded-md text-xs font-medium border border-green-300 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-950 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                         >
-                          {isActionLoading ? "..." : "Approve"}
+                          {loading ? "…" : "Approve"}
                         </button>
                         <button
-                          disabled={isActionLoading}
+                          disabled={loading}
                           onClick={() => handleReject(req.id)}
-                          className="flex-1 bg-rose-600/10 hover:bg-rose-600 hover:text-white border border-rose-500/20 hover:border-rose-500 text-rose-400 font-semibold py-1.5 rounded-lg text-xs transition-all duration-200 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="flex-1 py-1.5 rounded-md text-xs font-medium border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                         >
-                          {isActionLoading ? "..." : "Reject"}
+                          {loading ? "…" : "Reject"}
                         </button>
                       </div>
                     </div>
@@ -449,30 +448,33 @@ export default function TeamLeaveDashboard({
             )}
           </div>
 
-          {/* Rejected Leave Requests History */}
+          {/* Rejected History */}
           {rejectedRequests.length > 0 && (
-            <div className="space-y-3 pt-2">
-              <h3 className="text-xs font-bold text-slate-500 tracking-wider uppercase flex items-center gap-2">
-                Rejected History
-                <span className="text-3xs font-semibold opacity-60">({rejectedRequests.length})</span>
-              </h3>
-              <div className="space-y-2 opacity-50 hover:opacity-100 transition-opacity duration-350">
+            <div>
+              <h2 className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-2">
+                Rejected ({rejectedRequests.length})
+              </h2>
+              <div className="space-y-1">
                 {rejectedRequests.map((req) => {
-                  const emp = employees.find((e) => e.id === req.employeeId);
+                  const emp = employees.find(
+                    (e) => e.id === req.employeeId
+                  );
                   if (!emp) return null;
-
                   return (
                     <div
                       key={req.id}
-                      className="p-3 rounded-lg border border-slate-950 bg-slate-900/10 flex items-center justify-between text-3xs"
+                      className="rounded-md border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/50 px-3 py-2 flex items-center justify-between text-xs text-gray-500 dark:text-slate-500"
                     >
-                      <div>
-                        <span className="font-bold text-slate-300">{emp.name}</span>
-                        <span className="text-slate-500 ml-2">({getTeamName(emp.team)})</span>
-                      </div>
-                      <div className="text-slate-400">
-                        {formatFriendlyDate(req.startDate)} - {formatFriendlyDate(req.endDate)}
-                      </div>
+                      <span>
+                        {emp.name}{" "}
+                        <span className="text-gray-400 dark:text-slate-600">
+                          · {getTeamName(emp.team)}
+                        </span>
+                      </span>
+                      <span>
+                        {formatDate(req.startDate)} –{" "}
+                        {formatDate(req.endDate)}
+                      </span>
                     </div>
                   );
                 })}

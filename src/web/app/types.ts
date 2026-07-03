@@ -58,21 +58,21 @@ export function getTeamColor(team: Team | number): {
   switch (teamName) {
     case "Engineering":
       return {
-        bg: "bg-blue-500/10 dark:bg-blue-400/10",
-        text: "text-blue-600 dark:text-blue-400",
-        border: "border-blue-500/20 dark:border-blue-400/20",
+        bg: "bg-blue-50 dark:bg-blue-950",
+        text: "text-blue-700 dark:text-blue-300",
+        border: "border-blue-200 dark:border-blue-800",
       };
     case "Operations":
       return {
-        bg: "bg-emerald-500/10 dark:bg-emerald-400/10",
-        text: "text-emerald-600 dark:text-emerald-400",
-        border: "border-emerald-500/20 dark:border-emerald-400/20",
+        bg: "bg-green-50 dark:bg-green-950",
+        text: "text-green-700 dark:text-green-300",
+        border: "border-green-200 dark:border-green-800",
       };
     case "Finance":
       return {
-        bg: "bg-amber-500/10 dark:bg-amber-400/10",
-        text: "text-amber-600 dark:text-amber-400",
-        border: "border-amber-500/20 dark:border-amber-400/20",
+        bg: "bg-amber-50 dark:bg-amber-950",
+        text: "text-amber-700 dark:text-amber-300",
+        border: "border-amber-200 dark:border-amber-800",
       };
   }
 }
@@ -80,27 +80,23 @@ export function getTeamColor(team: Team | number): {
 export function getStatusColor(status: Status | number): {
   bg: string;
   text: string;
-  dot: string;
 } {
   const statusName = typeof status === "number" ? getStatusName(status) : status;
   switch (statusName) {
     case "Pending":
       return {
-        bg: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
-        text: "text-yellow-700 dark:text-yellow-400",
-        dot: "bg-yellow-500",
+        bg: "bg-yellow-50 dark:bg-yellow-950",
+        text: "text-yellow-700 dark:text-yellow-300",
       };
     case "Approved":
       return {
-        bg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-        text: "text-emerald-700 dark:text-emerald-400",
-        dot: "bg-emerald-500",
+        bg: "bg-green-50 dark:bg-green-950",
+        text: "text-green-700 dark:text-green-300",
       };
     case "Rejected":
       return {
-        bg: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-        text: "text-rose-700 dark:text-rose-400",
-        dot: "bg-rose-500",
+        bg: "bg-red-50 dark:bg-red-950",
+        text: "text-red-700 dark:text-red-300",
       };
   }
 }

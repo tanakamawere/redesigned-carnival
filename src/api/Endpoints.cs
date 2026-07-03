@@ -48,6 +48,13 @@ public static class Endpoints
             return Results.Ok(employees);
         });
 
+        // Endpoint to list all public holidays
+        app.MapGet("/api/publicholidays", async (DataContext context) =>
+        {
+            var holidays = await context.PublicHolidays.ToListAsync();
+            return Results.Ok(holidays);
+        });
+
         // Endpoint to list leave requests for the next 30 days
         app.MapGet("/api/leaverequests/upcoming", async (DataContext context) =>
         {

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Employee, LeaveRequest } from "./types";
+import { Employee, LeaveRequest, PublicHoliday } from "./types";
 
 const API_BASE_URL = process.env.API_URL || "http://localhost:5245";
 
@@ -46,6 +46,25 @@ export async function getUpcomingRequests(): Promise<LeaveRequest[]> {
     return data;
   } catch (error) {
     console.error("Error fetching upcoming leave requests:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetch all public holidays
+ */
+export async function getPublicHolidays(): Promise<PublicHoliday[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/publicholidays`, {
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch public holidays: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data;
+  } catch (error) {
+    console.error("Error fetching public holidays:", error);
     return [];
   }
 }
