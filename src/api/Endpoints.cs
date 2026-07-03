@@ -1,10 +1,11 @@
+using Microsoft.EntityFrameworkCore;
 using Scheduler.API.Entities;
 
 namespace Scheduler.API;
 
 public static class Endpoints
 {
-    public static IEndpointRouteBuilder MapEndpoints(this IEndpointRouteBuilder app)
+    public static IEndpointRouteBuilder MapAppEndpoints(this IEndpointRouteBuilder app)
     {
         // API endpoint for submitting a new leave request
         app.MapPost("/api/leaverequests", async (LeaveRequest leaveRequest, DataContext context) =>
@@ -19,8 +20,7 @@ public static class Endpoints
             var overlappingLeaveRequests = await context.LeaveRequests
                 .Where(lr => lr.EmployeeId == leaveRequest.EmployeeId &&
                              lr.StartDate <= leaveRequest.EndDate &&
-                             lr.EndDate >= leaveRequest.StartDate)
-                .ToListAsync();
+                             lr.EndDate >= leaveRequest.StartDate).ToListAsync();
 
             if (overlappingLeaveRequests.Any())
             {
