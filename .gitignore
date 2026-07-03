@@ -1,0 +1,57 @@
+# ==============================
+# ASP.NET Core / .NET
+# ==============================
+bin/
+obj/
+packages/
+*.user
+*.suo
+*.cache
+project.lock.json
+*.csproj.user
+*.dbmdl
+*.log
+*.tss
+*.vs/
+.vs/
+ApplicationInsights.config
+*.psess
+*.vsp
+*.vspx
+*.sap
+*.sln.docstates
+*.swp
+*.bak
+
+# ==============================
+# Next.js / Node
+# ==============================
+node_modules/
+.next/
+out/
+dist/
+build/
+.nuxt/
+.swc/
+*.log
+*.pem
+*.debug
+.env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ==============================
+# General / OS
+# ==============================
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+*.swo
+*.swp
+*.~*
+*.pid
+*.seed
+*.pid.lock
